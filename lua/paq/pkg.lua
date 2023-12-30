@@ -193,4 +193,4 @@ local function parse(data)
     return pkg
 end
 
-return { parse = parse }
+return { Status = Status, parse = parse }
