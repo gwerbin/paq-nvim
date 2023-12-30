@@ -2,25 +2,12 @@
 
 ---@alias Path string
 
-local uv = vim.loop
+local uv = vim.uv or vim.loop
 
----@class setup_opts
----@field path Path
----@field opt boolean
----@field verbose boolean
----@field log Path
----@field lock Path
----@field url_format string
----@field clone_args string[]
-local Config = {
-    path = vim.fn.stdpath("data") .. "/site/pack/paqs/",
-    opt = false,
-    verbose = false,
-    url_format = "https://github.com/%s.git",
-    log = vim.fn.stdpath(vim.fn.has("nvim-0.8") == 1 and "log" or "cache") .. "/paq.log",
-    lock = vim.fn.stdpath("data") .. "/paq-lock.json",
-    clone_args = { "--depth=1", "--recurse-submodules", "--shallow-submodules", "--no-single-branch" }
-}
+local Config = require("paq.cfg").Config
+local Status = require("paq.pkg").Status
+local get_git_hash = require("paq.git").get_git_hash
+local parse = require("paq.pkg").parse
 
 ---@enum Messages
 local Messages = {
@@ -32,17 +19,6 @@ local Messages = {
 
 local Lock = {}     -- Table of pgks loaded from the lockfile
 local Packages = {} -- Table of pkgs loaded from the user configuration
-
----@enum Status
-local Status = {
-    INSTALLED = 0,
-    CLONED = 1,
-    UPDATED = 2,
-    REMOVED = 3,
-    TO_INSTALL = 4,
-    TO_MOVE = 5,
-    TO_RECLONE = 6,
-}
 
 -- stylua: ignore
 local Filter = {
@@ -86,21 +62,6 @@ local function find_unlisted()
         end
     end
     return unlisted
-end
-
----@param dir Path
----@return string
-local function get_git_hash(dir)
-    local first_line = function(path)
-        local file = io.open(path)
-        if file then
-            local line = file:read()
-            file:close()
-            return line
-        end
-    end
-    local head_ref = first_line(dir .. "/.git/HEAD")
-    return head_ref and first_line(dir .. "/.git/" .. head_ref:gsub("ref: ", ""))
 end
 
 ---@param process string
@@ -265,22 +226,11 @@ end
 -- }}}
 -- PKGS: {{{
 
----@class Package
----@field name string
----@field as string
----@field branch string
----@field dir string
----@field status Status
----@field hash string
----@field pin boolean
----@field build string | function
----@field url string
-
 ---@param pkg Package
 ---@param counter function
 ---@param build_queue table
 local function clone(pkg, counter, build_queue)
-    local args = vim.list_extend({ "clone", pkg.url }, Config.clone_args)
+    local args = vim.list_extend({ "clone", pkg.url_maybe }, Config.clone_args)
     if pkg.branch then
         vim.list_extend(args, { "-b", pkg.branch })
     end
@@ -370,7 +320,7 @@ local function reclone(pkg, counter, build_queue)
     if not ok then
         return
     end
-    local args = vim.list_extend({ "clone", pkg.url }, Config.clone_args)
+    local args = vim.list_extend({ "clone", pkg.url_maybe }, Config.clone_args)
     if pkg.branch then
         vim.list_extend(args, { "-b", pkg.branch })
     end
@@ -397,31 +347,7 @@ end
 
 ---@param pkg Package
 local function register(pkg)
-    if type(pkg) == "string" then
-        pkg = { pkg }
-    end
-    local url = pkg.url
-        or (pkg[1]:match("^https?://") and pkg[1])                      -- [1] is a URL
-        or string.format(Config.url_format, pkg[1])                     -- [1] is a repository name
-    local name = pkg.as or url:gsub("%.git$", ""):match("/([%w-_.]+)$") -- Infer name from `url`
-    if not name then
-        return vim.notify(" Paq: Failed to parse " .. vim.inspect(pkg), vim.log.levels.ERROR)
-    end
-    local opt = pkg.opt or Config.opt and pkg.opt == nil
-    local dir = Config.path .. (opt and "opt/" or "start/") .. name
-    Packages[name] = {
-        name = name,
-        branch = pkg.branch,
-        dir = dir,
-        status = uv.fs_stat(dir) and Status.INSTALLED or Status.TO_INSTALL,
-        hash = get_git_hash(dir),
-        pin = pkg.pin,
-        build = pkg.build or pkg.run,
-        url = url,
-    }
-    if pkg.run then
-        vim.deprecate("`run` option", "`build`", "3.0", "Paq", false)
-    end
+    Packages[pkg.name] = parse(pkg)
 end
 
 ---@param pkg Package
@@ -488,7 +414,7 @@ local function diff_gather()
             for k, v in pairs {
                 dir = Status.TO_MOVE,
                 branch = Status.TO_RECLONE,
-                url = Status.TO_RECLONE,
+                url_maybe = Status.TO_RECLONE,
             } do
                 if lock_pkg[k] ~= pack_pkg[k] then
                     lock_pkg.status = v
@@ -577,7 +503,9 @@ local meta = {}
 ---See |luaref-langFuncCalls|.
 function meta:__call(pkgs)
     Packages = {}
-    vim.tbl_map(register, pkgs)
+    for _, p in ipairs(pkgs) do
+        register(p)
+    end
     lock_load()
     exe_op("resolve", resolve, diff_gather(), true)
     return self
@@ -607,7 +535,7 @@ do
     vim.api.nvim_create_user_command("PaqSync", function() paq:sync() end, { bar = true })
     vim.api.nvim_create_user_command("PaqBuild", function(a) run_build(Packages[a.args]) end, build_cmd_opts)
     vim.api.nvim_create_user_command("PaqRunHook", function(a)
-        vim.deprecate("`PaqRunHook` command", "`PaqBuild`", "3.0", "Paq", false)
+        vim.deprecate(":PaqRunHook", ":PaqBuild", "3.0", "Paq", false)
         run_build(Packages[a.args])
     end, build_cmd_opts)
 end
