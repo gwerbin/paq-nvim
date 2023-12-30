@@ -1,19 +1,24 @@
-local TESTPATH = vim.fn.stdpath("data") .. "/site/pack/test/"
 local uv = vim.loop
 
 package.loaded.paq = nil
+package.path = "./lua/?.lua;./lua/?/init.lua;" .. package.path
+
+local TESTPATH = vim.fn.stdpath("data") .. "/site/pack/test/"
+
 local paq = require("paq"):setup({ path = TESTPATH })
 
 local PACKAGES = {
     -- { "badbadnotgood", opt = true }, -- should fail to parse
+
     { "rust-lang/rust.vim", opt = true }, -- test opt
     { "JuliaEditorSupport/julia-vim", as = "julia" }, -- test as
 
-    { as = "wiki", url = "https://github.com/lervag/wiki.vim" }, -- test url + as
+    { as = "wiki", url = "git+https://github.com/lervag/wiki.vim" }, -- test url + as
 
     { "junegunn/fzf", build = vim.fn["fzf#install"] }, -- test build function
 
-    { "autozimu/LanguageClient-neovim", branch = "next", build = "bash install.sh" }, -- branch + build command
+    { "autozimu/LanguageClient-neovim", branch = "next" },
+    -- { "autozimu/LanguageClient-neovim", branch = "next", build = "bash install.sh" }, -- branch + build command
 }
 
 local function test_branch(paq, dir, branch)

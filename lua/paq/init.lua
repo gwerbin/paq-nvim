@@ -184,10 +184,10 @@ end
 -- LOCKFILE: {{{
 
 local function lock_write()
-    -- remove run key since can have a function in it, and
-    -- json.encode doesn't support functions
     local pkgs = vim.deepcopy(Packages)
     for p, _ in pairs(pkgs) do
+        -- Remove the `build` key because it can contain a function, and
+        -- json.encode() doesn't support functions.
         pkgs[p].build = nil
     end
     local file = uv.fs_open(Config.lock, "w", 438)
@@ -230,9 +230,13 @@ end
 ---@param counter function
 ---@param build_queue table
 local function clone(pkg, counter, build_queue)
-    local args = vim.list_extend({ "clone", pkg.url_maybe }, Config.clone_args)
+    if not pkg.url:match("^git%+") then
+        return vim.notify("Only Git URLs (prefixed with 'git+') are supported.")
+    end
+    local url = pkg.url:gsub("^git%+", "")
+    local args = vim.list_extend({ "clone", url }, Config.clone_args)
     if pkg.branch then
-        vim.list_extend(args, { "-b", pkg.branch })
+        vim.list_extend(args, { "--branch", pkg.branch })
     end
     table.insert(args, pkg.dir)
     run("git", args, nil, function(ok)
@@ -316,13 +320,17 @@ end
 
 ---@param pkg Package
 local function reclone(pkg, counter, build_queue)
+    if not pkg.url:match("^git%+") then
+        return vim.notify("Only Git URLs (prefixed with 'git+') are supported.")
+    end
     local ok = rmdir(pkg.dir)
     if not ok then
         return
     end
-    local args = vim.list_extend({ "clone", pkg.url_maybe }, Config.clone_args)
+    local url = pkg.url:gsub("^git%+", "")
+    local args = vim.list_extend({ "clone", url }, Config.clone_args)
     if pkg.branch then
-        vim.list_extend(args, { "-b", pkg.branch })
+        vim.list_extend(args, { "--branch", pkg.branch })
     end
     table.insert(args, pkg.dir)
     run("git", args, nil, function(ok)
@@ -345,9 +353,10 @@ local function resolve(pkg, counter, build_queue)
     end
 end
 
----@param pkg Package
-local function register(pkg)
-    Packages[pkg.name] = parse(pkg)
+---@param data any
+local function register(data)
+    local pkg = parse(data)  -- [FIXME] This is bad design
+    Packages[pkg.name] = pkg
 end
 
 ---@param pkg Package

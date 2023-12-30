@@ -10,7 +10,7 @@ local Config = {
     path = vim.fn.stdpath("data") .. "/site/pack/paqs/",
     opt = false,
     verbose = false,
-    url_format = "https://github.com/%s.git",
+    url_format = "git+https://github.com/%s.git",
     log = vim.fn.stdpath(vim.fn.has("nvim-0.8") == 1 and "log" or "cache") .. "/paq.log",
     lock = vim.fn.stdpath("data") .. "/paq-lock.json",
     clone_args = { "--depth=1", "--recurse-submodules", "--shallow-submodules", "--no-single-branch" }
