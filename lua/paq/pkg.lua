@@ -89,7 +89,7 @@ local function parse_url(data)
     end
 
     -- RFC 3986 ch.2 "Characters" <https://www.rfc-editor.org/rfc/rfc3986#page-11>
-    if url_maybe:match("[^%w:%[%]./_%-@%-#?=%(%),;*!]") then
+    if url_maybe:match("[^%w:%[%]./_%-@%-#?=%(%),;*!+]") then
         return _err("Package url= contains invalid data! If this is intentional, use percent-encoding.")
     end
 
